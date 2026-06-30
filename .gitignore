@@ -1,0 +1,10 @@
+# Compiled display-count helper (platform/arch-specific — built by install.sh)
+hooks/system-context/displaycount
+*.o
+
+# Runtime state the hook writes (never belongs in the repo)
+hooks/system-context/state/
+hooks/system-context/wifi-dev
+
+# Editor / OS cruft
+.DS_Store
