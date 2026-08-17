@@ -1,0 +1,27 @@
+{
+  "devices": {
+    "My MacBook Pro": {
+      "role": "laptop"
+    },
+    "my-mac-studio": {
+      "role": "Mac Studio",
+      "location": "home"
+    }
+  },
+  "networkProfiles": {
+    "Home WiFi": {
+      "location": "home"
+    },
+    "Office WiFi": {
+      "location": "work"
+    },
+    "Phone Hotspot": {
+      "location": "on the go",
+      "metered": true
+    }
+  },
+  "tailscalePeers": {
+    "my-mac-studio": "Mac Studio",
+    "My MacBook Pro": "laptop"
+  }
+}
