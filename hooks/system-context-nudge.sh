@@ -31,6 +31,8 @@ PROFILE_HELPER="$SYSCTX_DIR/profile.py"
 CONFIG_FILE="${NUDGE_CONFIG:-$HOME/.config/agent-system-context/config.json}"
 PY="${NUDGE_PYTHON:-/usr/bin/python3}"
 [ -x "$PY" ] || PY="$(command -v python3 2>/dev/null || printf '%s' /usr/bin/python3)"
+ARP_BIN="${NUDGE_ARP:-/usr/sbin/arp}"
+SHASUM_BIN="${NUDGE_SHASUM:-/usr/bin/shasum}"
 
 # ---- read hook input (JSON on stdin) ------------------------------------
 INPUT="$(cat 2>/dev/null)"
@@ -62,7 +64,17 @@ fi
 SSID="$(ipconfig getsummary "$WIFI_DEV" 2>/dev/null | awk -F' SSID : ' '/ SSID : /{print $2; exit}')"
 SSID="$(printf '%s' "$SSID" | tr -d '\n' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
 
-DEF_IF="$(route -n get default 2>/dev/null | awk '/interface:/{print $2; exit}')"
+DEFAULT_ROUTE="$(route -n get default 2>/dev/null || true)"
+DEF_IF="$(printf '%s' "$DEFAULT_ROUTE" | awk '/interface:/{print $2; exit}')"
+DEFAULT_GATEWAY="$(printf '%s' "$DEFAULT_ROUTE" | awk '/gateway:/{print $2; exit}')"
+GATEWAY_MAC=""
+if [ -n "$DEFAULT_GATEWAY" ]; then
+  GATEWAY_MAC="$("$ARP_BIN" -n "$DEFAULT_GATEWAY" 2>/dev/null | awk '/ at /{print $4; exit}')"
+fi
+NETWORK_FINGERPRINT=""
+if [ -n "$DEFAULT_GATEWAY" ] && [ -n "$GATEWAY_MAC" ] && [ "$GATEWAY_MAC" != "(incomplete)" ]; then
+  NETWORK_FINGERPRINT="$(printf '%s' "$DEFAULT_GATEWAY|$GATEWAY_MAC" | "$SHASUM_BIN" -a 256 2>/dev/null | awk '{print $1}')"
+fi
 if [ -n "$DEF_IF" ]; then NET="online"; else NET="offline"; fi
 
 DISPLAYS=""
@@ -102,6 +114,8 @@ if [ -f "$PROFILE_HELPER" ] && [ -x "$PY" ]; then
     NUDGE_SSID="$SSID" \
     NUDGE_DEFAULT_INTERFACE="$DEF_IF" \
     NUDGE_WIFI_INTERFACE="$WIFI_DEV" \
+    NUDGE_DEFAULT_GATEWAY="$DEFAULT_GATEWAY" \
+    NUDGE_NETWORK_FINGERPRINT="$NETWORK_FINGERPRINT" \
     "$PY" "$PROFILE_HELPER" "$CONFIG_FILE" 2>/dev/null || true)"
 fi
 
@@ -125,10 +139,10 @@ elif [ -f "$GLOB_FILE" ]; then BASE_FILE="$GLOB_FILE"; fi
 
 FIRST_RUN=1
 P_SEEN=""; P_SSID=""; P_POWER=""; P_DISPLAYS=""; P_NET=""; P_WAKE="0"; P_BOOT="0"
-P_LOCATION=""; P_BANDWIDTH=""; P_TS_STATE=""
+P_LOCATION=""; P_BANDWIDTH=""; P_TS_STATE=""; P_NETWORK_FINGERPRINT=""
 if [ -n "$BASE_FILE" ]; then
   FIRST_RUN=0
-  { IFS= read -r P_SEEN; IFS= read -r P_SSID; IFS= read -r P_POWER; IFS= read -r P_DISPLAYS; IFS= read -r P_NET; IFS= read -r P_WAKE; IFS= read -r P_BOOT; IFS= read -r P_LOCATION; IFS= read -r P_BANDWIDTH; IFS= read -r P_TS_STATE; } < "$BASE_FILE" 2>/dev/null
+  { IFS= read -r P_SEEN; IFS= read -r P_SSID; IFS= read -r P_POWER; IFS= read -r P_DISPLAYS; IFS= read -r P_NET; IFS= read -r P_WAKE; IFS= read -r P_BOOT; IFS= read -r P_LOCATION; IFS= read -r P_BANDWIDTH; IFS= read -r P_TS_STATE; IFS= read -r P_NETWORK_FINGERPRINT; } < "$BASE_FILE" 2>/dev/null
   printf '%s' "$P_WAKE" | grep -qE '^[0-9]+$' || P_WAKE=0
   printf '%s' "$P_BOOT" | grep -qE '^[0-9]+$' || P_BOOT=0
 fi
@@ -171,7 +185,9 @@ if [ "$FIRST_RUN" = "0" ]; then
     add "⏱ ~$(humandur "$gap") elapsed since the last activity here (was $(date -r "$P_SEEN" '+%a %H:%M'), now $(date '+%a %Y-%m-%d %H:%M %Z')). Treat time-sensitive context as stale: 'today', auth tokens, caches, timers, and open PR/CI/build state."
   fi
   network_changed=0
-  if [ "$SSID" != "$P_SSID" ] || { [ -n "$P_LOCATION" ] && [ "$LOCATION" != "$P_LOCATION" ]; }; then
+  if [ "$SSID" != "$P_SSID" ] \
+    || { [ -n "$P_LOCATION" ] && [ "$LOCATION" != "$P_LOCATION" ]; } \
+    || { [ -n "$P_NETWORK_FINGERPRINT" ] && [ "$NETWORK_FINGERPRINT" != "$P_NETWORK_FINGERPRINT" ]; }; then
     network_changed=1
     add "📍 Network/location context is now ${NETWORK_CONTEXT}${BANDWIDTH:+ (${BANDWIDTH} bandwidth)}. Expect reachability, latency, captive-portal, LAN, and VPN differences."
   fi
@@ -232,7 +248,7 @@ fi
 
 # ---- persist state ------------------------------------------------------
 write_state() {
-  printf '%s\n' "$now" "$SSID" "$POWER" "$DISPLAYS" "$NET" "$WAKETIME" "$BOOTTIME" "$LOCATION" "$BANDWIDTH" "$TAILSCALE_STATE" > "$1.tmp" 2>/dev/null \
+  printf '%s\n' "$now" "$SSID" "$POWER" "$DISPLAYS" "$NET" "$WAKETIME" "$BOOTTIME" "$LOCATION" "$BANDWIDTH" "$TAILSCALE_STATE" "$NETWORK_FINGERPRINT" > "$1.tmp" 2>/dev/null \
     && mv -f "$1.tmp" "$1" 2>/dev/null
 }
 write_state "$SESS_FILE"

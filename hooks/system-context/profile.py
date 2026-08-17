@@ -115,8 +115,18 @@ def network_profile(
     ssid = safe_label(os.environ.get("NUDGE_SSID"))
     default_interface = safe_label(os.environ.get("NUDGE_DEFAULT_INTERFACE"), 40)
     wifi_interface = safe_label(os.environ.get("NUDGE_WIFI_INTERFACE"), 40)
+    default_gateway = safe_label(os.environ.get("NUDGE_DEFAULT_GATEWAY"), 80)
+    network_fingerprint = safe_label(
+        os.environ.get("NUDGE_NETWORK_FINGERPRINT"), 80
+    ).casefold()
+    usable_ssid = ssid if ssid.casefold() not in {"<redacted>", "‹redacted›"} else ""
     profiles = casefold_map(config.get("networkProfiles"))
-    selected = profiles.get(ssid.casefold()) if ssid else None
+    fingerprints = casefold_map(config.get("networkFingerprints"))
+    selected = profiles.get(usable_ssid.casefold()) if usable_ssid else None
+    if selected is None and network_fingerprint:
+        selected = fingerprints.get(network_fingerprint)
+    if selected is None and default_gateway == "172.20.10.1":
+        selected = {"location": "on the go", "metered": True}
 
     location = fixed_location
     bandwidth = "normal"
@@ -136,12 +146,20 @@ def network_profile(
     if not guidance and bandwidth in {"metered", "constrained"}:
         guidance = DEFAULT_METERED_GUIDANCE
 
-    if ssid:
-        connection = f'Wi-Fi "{ssid}"'
-    elif default_interface and default_interface != wifi_interface:
-        connection = "wired/non-Wi-Fi network"
+    if default_interface and wifi_interface and default_interface != wifi_interface:
+        connection = (
+            "Ethernet/wired network"
+            if default_interface.startswith("en")
+            else "non-Wi-Fi/VPN network"
+        )
+    elif usable_ssid:
+        connection = f'Wi-Fi "{usable_ssid}"'
+    elif default_interface and default_interface == wifi_interface:
+        connection = "Wi-Fi (SSID unavailable)"
+    elif default_interface:
+        connection = "non-Wi-Fi network"
     else:
-        connection = "no Wi-Fi"
+        connection = "no active network"
 
     location_text = location or "location unknown"
     return location, bandwidth, guidance, f"{location_text} via {connection}"
