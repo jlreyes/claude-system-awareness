@@ -20,6 +20,14 @@
       "metered": true
     }
   },
+  "networkFingerprints": {
+    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef": {
+      "location": "home"
+    },
+    "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210": {
+      "location": "work"
+    }
+  },
   "tailscalePeers": {
     "my-mac-studio": "Mac Studio",
     "My MacBook Pro": "laptop"

@@ -129,6 +129,10 @@ Example shape:
     "Office WiFi": { "location": "work" },
     "Phone Hotspot": { "location": "on the go", "metered": true }
   },
+  "networkFingerprints": {
+    "<sha256-of-home-gateway-and-mac>": { "location": "home" },
+    "<sha256-of-work-gateway-and-mac>": { "location": "work" }
+  },
   "tailscalePeers": {
     "my-mac-studio": "Mac Studio",
     "My MacBook Pro": "laptop"
@@ -141,6 +145,18 @@ macOS Computer Name, LocalHostName, or Tailscale HostName. Tailscale peer keys
 may match HostName, full MagicDNS name, or its first label. Only configured
 peers are included, which avoids dumping phones, tablets, Funnel nodes, and
 other unrelated tailnet members into every prompt.
+
+Recent macOS releases may return the literal value `<redacted>` instead of an
+SSID to background CLI processes. `networkFingerprints` is the fast fallback:
+the hook hashes the default gateway address plus its local ARP MAC and matches
+only that SHA-256 value. Raw gateway details never enter model context or the
+profile. Exact SSID profiles still take precedence when macOS exposes one.
+The common iPhone Personal Hotspot gateway (`172.20.10.1`) is treated as
+`on the go` and metered even when its SSID is hidden.
+
+Transport comes from the default-route interface, independently of location.
+For example, a Mac Studio whose Wi-Fi remains associated but whose default
+route is Ethernet reports `home via Ethernet/wired network`.
 
 `metered: true` adds conservative bandwidth guidance. Override it with a
 profile-specific `guidance` string if needed.
@@ -162,9 +178,10 @@ session IDs. Both read the same private profile.
 ## Privacy and safety
 
 - No telemetry and no remote requests from this project.
-- SSIDs, machine labels, and selected Tailscale names/addresses enter the local
-  model context because that is the feature. The profile itself stays outside
-  the repository and is installed with mode `0600`.
+- Available SSIDs, semantic locations, machine labels, and selected Tailscale
+  names/addresses enter the local model context because that is the feature.
+  Gateway fingerprints never do. The profile itself stays outside the
+  repository and is installed with mode `0600`.
 - The whole tailnet is never rendered. Only explicitly selected peers appear.
 - Machine-controlled labels are normalized, control characters removed,
   markup brackets replaced, and lengths bounded before prompt insertion.
